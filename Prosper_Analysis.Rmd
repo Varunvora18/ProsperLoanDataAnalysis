@@ -1,0 +1,715 @@
+.
+```{r}
+# Load all necessary packages
+
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+library(ggthemes)
+library(gridExtra)
+library(RColorBrewer)
+library(knitr)
+library(GGally)
+library(psych)
+library('corrplot')
+```
+
+
+```{r}
+# Load the Data
+
+loan <- read.csv('C:/Users/varun/prosperLoanData.csv', sep = ',')
+```
+
+```{r}
+dim(loan)
+```
+
+```{r}
+table(loan$LoanStatus)
+```
+
+
+```{r}
+
+#create list that I want to combine into Chargedoff variable
+Chargedoff <- c("Past Due (>120 days)",
+                "Chargedoff")
+#create list that I want to combine into PastDue variable
+PastDue <- c("Past Due (1-15 days)",
+             "Past Due (16-30 days)",
+             "Past Due (31-60 days)",
+             "Past Due (61-90 days)",
+             "Past Due (91-120 days)")
+#create list that I want to combine into Completed variable
+Completed <- c("FinalPaymentInProgress",
+               "Cancelled")
+#change LoanStatus format to string
+loan$LoanStatus <- as.character(loan$LoanStatus)
+# start change each variable
+loan$LoanStatus[loan$LoanStatus %in% Chargedoff] <- "Chargedoff"
+loan$LoanStatus[loan$LoanStatus %in% PastDue] <- "PastDue"
+loan$LoanStatus[loan$LoanStatus %in% Completed] <- "Completed"
+loan$LoanStatus <- factor(loan$LoanStatus, 
+                          levels = c("Completed",  "Current", 
+                                     "PastDue", "Chargedoff", "Defaulted"), 
+                          ordered = T)
+# print out the change result
+table(loan$LoanStatus)
+
+```
+
+
+```{r}
+
+# plot LoanStatus bar chart
+ggplot(aes(x= LoanStatus, y = ..count../sum(..count..)), data = loan) + 
+  geom_bar() +
+  geom_text(stat='count', 
+            aes(label= paste(round(..count../sum(..count..)*100, 2),"%"))
+            , vjust=-0.5)
+
+```
+
+
+```{r}
+
+loan$CompletedOrRisk<- ifelse(
+  loan$LoanStatus %in% c("PastDue","Chargedoff", "Defaulted"), 
+"HighRisk", as.character(loan$LoanStatus))
+
+# subset the data only contain Completed and HighRisk loan
+sub_loan<- subset(loan, CompletedOrRisk!= "Current")
+dim(sub_loan)
+
+```
+
+
+```{r}
+ggplot(aes(x= CompletedOrRisk), data = sub_loan) + 
+  geom_bar() +
+  geom_text(stat='count', aes(label=..count..), vjust=-0.5)
+
+# plot proportion for each loan status
+ggplot(aes(x= CompletedOrRisk, y = ..count../sum(..count..)), data = sub_loan) + 
+  geom_bar() +
+  geom_text(stat='count', 
+            aes(label= paste(round(..count../sum(..count..)*100, 2),"%")), 
+            vjust=-0.5) +
+  labs(x = "Loan Status", y = "Percentage")
+
+
+```
+
+
+```{r}
+gr1 <- ggplot(aes(x= CompletedOrRisk, y = ..count../sum(..count..)), 
+              data = subset(sub_loan, CreditGrade != "" )) + 
+  geom_bar() +
+  geom_text(stat='count', 
+            aes(label= paste(round(..count../sum(..count..)*100, 2),"%")), 
+            vjust=-0.5) +
+  labs(x = "Loan Status", y = "Percentage") +
+  ggtitle("Loan Status before 2009")
+
+# plot Loan Status before 2009 in Percentage
+gr2 <- ggplot(aes(x= CompletedOrRisk, y = ..count../sum(..count..)), 
+              data = subset(sub_loan, CreditGrade == "" )) + 
+  geom_bar() +
+  geom_text(stat='count', 
+            aes(label= paste(round(..count../sum(..count..)*100, 2),"%")), vjust=-0.5) +
+  labs(x = "Loan Status", y = "Percentage") +
+  ggtitle("Loan Status after 2009")
+
+grid.arrange(gr1, gr2 ,ncol = 2)
+
+```
+
+
+```{r}
+
+summary(loan$BorrowerRate)
+# plot BorrowerRate histogram
+ggplot(aes(x = BorrowerRate), data = loan) +
+  geom_histogram(binwidth = 0.005)
+
+```
+
+
+```{r}
+# plot plot BorrowerRate histogram and facet with loan status
+ggplot(aes(x = BorrowerRate), data = sub_loan) + 
+  geom_histogram(binwidth = 0.005) +
+  facet_wrap(~CompletedOrRisk, ncol = 2)
+
+```
+
+
+```{r}
+
+# create a summary table of CompletedOrRisk column clasified by it's value
+by(sub_loan$BorrowerRate, sub_loan$CompletedOrRisk, summary)
+```
+
+
+```{r}
+# find the most frequent interest rate and it's frequency
+sort(table(loan$BorrowerRate), decreasing=TRUE)[1:5]
+
+
+```
+
+
+```{r}
+
+# create a year column
+loan$LoanOriginationDate <- as.Date(loan$LoanOriginationDate)
+
+# transfer it to numeric
+loan$year <- as.numeric(format(loan$LoanOriginationDate, format = "%Y"))
+
+# make year column as factor
+loan$year <- factor(loan$year)
+
+# plot BorrowerRate by year
+ggplot(aes(x = BorrowerRate), data = loan) +
+  geom_histogram(binwidth = 0.005) +
+  facet_wrap(~year)
+
+```
+
+
+```{r}
+
+sub_loan$LoanOriginationDate <- as.Date(sub_loan$LoanOriginationDate)
+
+# transfer it to numeric
+sub_loan$year <- as.numeric(format(sub_loan$LoanOriginationDate, format = "%Y"))
+
+# make year column as factor
+sub_loan$year <- factor(sub_loan$year)
+
+# plot BorrowerRate by year with subdata 
+# only containing HighRisk and Completed loan
+ggplot(aes(x = BorrowerRate), data = sub_loan) +
+  geom_histogram(binwidth = 0.005) +
+  facet_wrap(~year)
+
+```
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, rate_plot_rating, fig.width= 14, fig.height=6, dpi=40, out.width="900px", out.height="850px"}
+
+
+gr3 <- ggplot(aes(x = BorrowerRate), data = sub_loan) +
+  geom_histogram(aes(color =ProsperRating..Alpha.), binwidth = 0.005) +
+  facet_wrap(~year, ncol =4) +
+  ggtitle("Loan after 2009")
+
+# plot distribution of BorrowerRate before 2009
+# and clasified by Prosper Rating
+gr4 <- ggplot(aes(x = BorrowerRate), data = sub_loan) +
+  geom_histogram(aes(color =CreditGrade), binwidth = 0.005) +
+  facet_wrap(~year, ncol =4) +
+  ggtitle("Loan before 2009")
+
+grid.arrange(gr3, gr4 ,ncol = 2)
+```
+
+
+```{r echo = FALSE, message=FALSE, warning=FALSE, CreditGrade_and_ProsperScore, dpi=40, out.width="800px", out.height="800px"}
+# list CreditGrade frequency table
+table(loan$CreditGrade)
+# list ProsperRating frequency table
+table(loan$ProsperRating..Alpha.)
+# make CreditGrade as factor and in an order of good level to bad level
+loan$CreditGrade <- factor(loan$CreditGrade, 
+                           levels =c("AA", "A", "B", "C", "D", "E", "HR", "NC"), 
+                           order = T)
+# make ProsperRating as factor and in an order of good level to bad level
+loan$ProsperRating..Alpha. <- 
+  factor(loan$ProsperRating..Alpha., 
+         levels =c("AA", "A", "B", "C", "D", "E", "HR"), 
+         order = T)
+# plot distribution of CreditGrade
+p1 <- ggplot(aes(x= CreditGrade), 
+             data = subset(loan, CreditGrade != "")) +
+  geom_bar() +
+  geom_text(stat='count', aes(label=..count..), vjust=1.2, size = 4) +
+  ggtitle("Credit Grade before 2009(low to high risk from left to right)")
+# plot distribution of ProsperRating
+p2 <- ggplot(aes(x= ProsperRating..Alpha.), 
+             data = subset(loan, ProsperRating..Alpha. != "")) +
+  geom_bar() +
+  geom_text(stat='count', aes(label=..count..), vjust=1.2, size = 4) +
+  ggtitle("Prosper Rating after 2009(low to high risk from left to right)")
+
+grid.arrange(p1, p2 ,ncol = 1, heights = c(2, 2))
+
+```
+
+
+```{r}
+
+sub_loan$CreditGrade <- 
+  factor(sub_loan$CreditGrade, 
+         levels =c("AA", "A", "B", "C", "D", "E", "HR", "NC"), 
+         order = T)
+# make ProsperRating as factor and in an order of good level to bad level
+# in the sub_loan subset
+sub_loan$ProsperRating..Alpha. <- 
+  factor(sub_loan$ProsperRating..Alpha., 
+         levels =c("AA", "A", "B", "C", "D", "E", "HR"), 
+         order = T)
+# plot distribution of CreditGrade and group by CompletedOrRisk
+p3 <- ggplot(aes(x= CreditGrade ,y = ..count../sum(..count..)), 
+             data = subset(sub_loan, CreditGrade != "")) +
+  geom_bar() +
+  geom_text(stat='count', 
+            aes(label= paste(round(..count../sum(..count..)*100, 2),"%")),
+            vjust=-.2,
+            size = 3.5) +
+  ggtitle("Credit Grade before 2009(low to high risk)") +
+  facet_wrap(~CompletedOrRisk, ncol = 2)
+
+# plot distribution of ProsperRating and group by CompletedOrRisk
+p4 <- ggplot(aes(x= ProsperRating..Alpha.,
+                 y = ..count../sum(..count..)), 
+             data = subset(sub_loan, ProsperRating..Alpha. != "" )) +
+  geom_bar() +
+  geom_text(stat='count', 
+            aes(label= paste(round(..count../sum(..count..)*100, 2),"%")), 
+            vjust=-.2, size = 3) +
+  ggtitle("Prosper Rating after 2009(low to high risk)") +
+  facet_wrap(~CompletedOrRisk, ncol = 2)
+
+grid.arrange(p3, p4 ,ncol = 1, heights = c(2, 2))
+
+```
+
+
+```{r}
+# create the new variable of CreditScoreAverage by
+# average the CreditScoreRangeLower and CreditScoreRangeUpper
+loan$CreditScoreAverage <- 
+  (loan$CreditScoreRangeLower + loan$CreditScoreRangeUpper) / 2
+sub_loan$CreditScoreAverage <- (sub_loan$CreditScoreRangeLower + sub_loan$CreditScoreRangeUpper) / 2
+
+
+```
+
+
+```{r}
+
+summary(loan$CreditScoreAverage)
+# plot the distribution of CreditScoreAverage Before 2009
+g5 <- ggplot(aes(x= CreditScoreAverage), 
+             data = subset(loan, CreditScoreAverage != ""& is.na(ProsperRating..Alpha.))) +
+  geom_histogram(binwidth = 10) +
+  coord_cartesian(xlim = c(510, 900)) +
+  scale_x_continuous(breaks = seq(510, 900, 20))+
+  ggtitle("Average Credit Score Before 2009(low to high risk)") 
+# plot the distribution of CreditScoreAverage after 2009
+g6 <- ggplot(aes(x= CreditScoreAverage),
+             data = subset(loan, CreditScoreAverage != ""& !is.na(ProsperRating..Alpha.))) +
+  geom_histogram(binwidth = 10) +
+  coord_cartesian(xlim = c(630, 900))+
+  scale_x_continuous(breaks = seq(630, 900, 20))+
+  ggtitle("Average Credit Score after 2009(low to high risk)") 
+
+grid.arrange(g5, g6 ,ncol = 1, heights = c(2, 2))
+
+```
+
+
+```{r}
+
+# make BankcardUtilization frequency table
+summary(loan$BankcardUtilization)
+# plot BankcardUtilization histogram
+ggplot(aes(x = BankcardUtilization), data = loan) +
+  geom_histogram(color = "black", binwidth = 0.1) +
+  scale_x_continuous(limits = c(-0.1,1.1), breaks = seq(-0.1,1.1,0.1))
+```
+
+
+```{r}
+
+# plot BankcardUtilization histogram group by CompletedOrRisk
+ggplot(aes(x = BankcardUtilization), data = sub_loan) +
+  geom_histogram(color = "black", binwidth = 0.1) +
+  scale_x_continuous(limits = c(-0.1,1.1), breaks = seq(-0.1,1.1,0.1)) +
+  facet_wrap(~CompletedOrRisk, ncol = 1)
+
+```
+
+
+```{r}
+
+# plot EmploymentStatusDuration histogram in year
+ggplot(aes(x= EmploymentStatusDuration/12), data = loan) +
+  geom_histogram(color = "black", binwidth = 1) +
+  scale_x_continuous(limits = c(0, 60), breaks = seq(0, 60, 2))+
+  xlab("Employment Duration in Years")
+# make EmploymentStatusDuration frequency table
+summary(loan$EmploymentStatusDuration/12)
+
+```
+
+
+```{r}
+
+# plot EmploymentStatusDuration histogram group by CompletedOrRisk
+ggplot(aes(x= EmploymentStatusDuration/12), data = sub_loan) +
+  geom_histogram(color = "black", binwidth = 1) +
+  scale_x_continuous(limits = c(0, 60), breaks = seq(0, 60, 2))+
+  xlab("Employment Duration in Years") + 
+  facet_wrap(~CompletedOrRisk)
+
+```
+
+
+```{r}
+
+# make IncomeRange as factor
+loan$IncomeRange <- factor(loan$IncomeRange, 
+                           levels = c("$0",  "$1-24,999","$25,000-49,999", "$50,000-74,999", "$75,000-99,999", "$100,000+", "Not employed", "Not displayed"), 
+                           ordered = T)
+# plot bar chart of IncomeRange
+ggplot(aes(x = IncomeRange), data = loan) +
+  geom_bar(color = "black") +
+  geom_text(stat='count', aes(label=..count..), hjust= -0.1)+
+  theme_pander() +
+  coord_flip()
+
+```
+
+
+```{r}
+# make IncomeRange as factor in sub_loan
+sub_loan$IncomeRange <- factor(sub_loan$IncomeRange, 
+                               levels = c("$0",  "$1-24,999","$25,000-49,999", "$50,000-74,999", "$75,000-99,999", "$100,000+", "Not employed", "Not displayed"), 
+                               ordered = T)
+# plot bar chart of IncomeRange group by CompletedOrRisk
+ggplot(aes(x = IncomeRange), data = sub_loan) +
+  geom_bar(color =  "black") +
+  geom_text(stat='count', aes(label=..count..), hjust= -0.1)+
+  theme_pander() +
+  coord_flip() +
+  facet_wrap(~CompletedOrRisk)
+```
+
+
+```{r}
+
+# plot StatedMonthlyIncome histogram and Transformed in log10
+# and group by CompletedOrRisk
+ggplot(aes(x= StatedMonthlyIncome), 
+       data = sub_loan) +
+  geom_histogram(color = "black" , binwidth = 0.5) +
+  scale_x_log10(
+    breaks=c(1,10,100,1000,5000,10000),
+    labels=c(1,10,100,1000,5000,10000)) +
+  facet_wrap(~CompletedOrRisk)
+# make StatedMonthlyIncome frequency table group by CompletedOrRisk
+by(sub_loan$StatedMonthlyIncome, sub_loan$CompletedOrRisk, summary)
+```
+
+
+```{r}
+
+# make CreditGrade as factor and reverse the order 
+# to make the following plot more readable
+sub_loan$CreditGrade <- factor(sub_loan$CreditGrade, levels=rev(levels(sub_loan$CreditGrade) ))
+# plot the percentage bar chart of CompletedOrRisk 
+# in each CreditGrade
+g13 <- ggplot(aes(x = CreditGrade, 
+                  fill = CompletedOrRisk), 
+              data = subset(sub_loan, !is.na(CreditGrade))) + 
+  geom_bar(position = "fill") +
+  ggtitle("Credit Grade V.S. Loan Status")
+# plot the percentage bar chart of CompletedOrRisk 
+# in each ProsperRating
+g14 <- ggplot(aes(x = ProsperRating..Alpha.,
+                  fill = CompletedOrRisk),
+              data = subset(sub_loan, !is.na(ProsperRating..Alpha.))) + 
+  geom_bar(position = "fill") +
+  ggtitle("Prosper Rating V.S. Loan Status")
+# plot the percentage bar chart of CompletedOrRisk 
+# in each CreditScoreAverage
+gg <-ggplot(aes(x=CreditScoreAverage, 
+                fill = CompletedOrRisk), 
+            data = subset(sub_loan,
+                          !is.na(CreditScoreAverage) &CreditScoreAverage >500)) + 
+  geom_bar(position = "fill") +
+  ggtitle("Credit Score Average V.S. Loan Status")
+
+grid.arrange(g13, g14, gg)
+
+```
+
+
+```{r}
+loan$DelinquentBorrowers <- ifelse(
+                                      loan$LoanStatus == "Defaulted" |
+                                      loan$LoanStatus == "Chargedoff" |
+                                      loan$LoanStatus == "Past Due (61-90 days)" |
+                                      loan$LoanStatus == "Past Due (91-120 days)" |
+                                      loan$LoanStatus == "Past Due (>120 days)",
+                                      1, 0)
+positions <- c("Not employed", "$0", "Not displayed",
+                "$1-24,999", "$25,000-49,999", "$50,000-74,999",
+                "$75,000-99,999", "$100,000+")
+
+ggplot(loan, aes(IncomeRange)) +
+  scale_x_discrete(limits = positions) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_bar()
+
+```
+
+
+```{r echo= FALSE, message=FALSE, warning=FALSE, corr, fig.width = 8, fig.height=8, dpi=50, out.width="800px", out.height="800px"}
+
+# choose necessary numeric columns 
+d <- sub_loan[, c("BorrowerRate", "EmploymentStatusDuration", "CreditScoreAverage","ProsperRating..numeric.","ProsperScore", "InquiriesLast6Months", "DelinquenciesLast7Years", "BankcardUtilization", "TotalProsperLoans", "ProsperPrincipalOutstanding", "ScorexChangeAtTimeOfListing", "DebtToIncomeRatio", "StatedMonthlyIncome")]
+
+# create log columns
+d$log_DebtToIncomeRatio <- d$DebtToIncomeRatio
+d$log_StatedMonthlyIncome <- d$StatedMonthlyIncome
+
+# make Prosper Score numeric
+d$ProsperScore <- as.numeric(d$ProsperScore)
+
+# log10 transform DebtToIncomeRatio and StatedMonthlyIncome
+d$log_DebtToIncomeRatio <- ifelse(is.na(d$log_DebtToIncomeRatio) | 
+                                   d$log_DebtToIncomeRatio ==0, 0, log10(d$log_DebtToIncomeRatio))
+
+d$log_StatedMonthlyIncome <- ifelse(is.na(d$log_StatedMonthlyIncome) | 
+                                   d$log_StatedMonthlyIncome ==0, 0, log10(d$log_StatedMonthlyIncome))
+
+# make na value of TotalProsperLoans and ProsperPrincipalOutstanding
+# and ScorexChangeAtTimeOfListing be 0 by their definitions
+
+d$TotalProsperLoans <- ifelse(
+  is.na(d$TotalProsperLoans), 0, d$TotalProsperLoans)
+d$ProsperPrincipalOutstanding <- ifelse(
+  is.na(d$ProsperPrincipalOutstanding), 0, d$ProsperPrincipalOutstanding)
+d$ScorexChangeAtTimeOfListing <- ifelse(
+  is.na(d$ScorexChangeAtTimeOfListing), 0, d$ScorexChangeAtTimeOfListing)
+
+# omit other na values
+d <- na.omit(d)
+
+# create correlation matrix
+M<- cor(d)
+corrplot(M, method = "number") #plot matrix
+
+
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
+
+```{r}
+```
+
